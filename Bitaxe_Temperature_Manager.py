@@ -3,12 +3,14 @@
 import requests
 import json
 import time
+import traceback
 
 miner_ip = "192.168.1.1"
 
 chk_interval = 10
 
-crit_temp = 70
+crit_temp = 73
+crit_vrtemp = 78
 
 def_freq = 500
 def_corevolt = 1000
@@ -24,13 +26,16 @@ max_vrtemp = 75
 max_error = 2
 
 ################################################################
+def printError(e) :
+  frame_summary = traceback.extract_tb(e.__traceback__)[-1]
+  print(f"Exception: {e}:{frame_summary.filename}:{frame_summary.lineno}")
 
 def manage_temp():
   url = "http://" + miner_ip + "/api/system/info"
   try:
     response = requests.get(url, timeout=5)
   except requests.RequestException as e:
-    print(str(e))
+    printError(e)
     return False
 
   status_code = response.status_code
@@ -38,7 +43,7 @@ def manage_temp():
     try :
       miner_info = response.json()
     except requests.RequestException as e:
-      print(type(e).__name__, str(e))
+      printError(e)
       return False
 
     cur_vrtemp = miner_info['vrTemp']
@@ -77,7 +82,7 @@ def manage_temp():
       try:
         response = requests.patch(url, json=data, timeout=5)
       except requests.RequestException as e:
-        print(str(e))
+        printError(e)
         return False
 
 ################################################################
@@ -87,7 +92,7 @@ url = "http://" + miner_ip + "/api/system/identify"
 try:
   response = requests.post(url, timeout=5)
 except requests.RequestException as e:
-  print(str(e))
+  printError(e)
 
 mnr_volt = def_corevolt
 mnr_freq = def_freq
@@ -97,7 +102,7 @@ data = {"frequency": mnr_freq, "coreVoltage": mnr_volt}
 try:
   response = requests.patch(url, json=data, timeout=5)
 except requests.RequestException as e:
-  print(str(e))
+  printError(e)
 
 while True:
 
