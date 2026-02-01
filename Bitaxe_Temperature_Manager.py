@@ -9,7 +9,7 @@ miner_ip = "192.168.1.1"
 
 chk_interval = 10
 
-crit_temp = 73
+crit_asictemp = 73
 crit_vrtemp = 78
 
 def_freq = 500
@@ -23,9 +23,11 @@ max_corevolt = 1150
 
 max_asictemp = 66
 max_vrtemp = 75
+max_watt = 24
 max_error = 2
 
 ################################################################
+
 def printError(e) :
   frame_summary = traceback.extract_tb(e.__traceback__)[-1]
   print(f"Exception: {e}:{frame_summary.filename}:{frame_summary.lineno}")
@@ -51,13 +53,14 @@ def manage_temp():
     cur_error = miner_info['errorPercentage']
     cur_freq = miner_info['frequency']
     cur_corevolt = miner_info['coreVoltage']
+    cur_watt = miner_info['power']
 
     delta_volt = 0
     delta_freq = 0
 
-    if cur_asictemp > max_asictemp or cur_vrtemp > max_vrtemp : # asic temp is hot
+    if cur_asictemp > max_asictemp or cur_vrtemp > max_vrtemp or cur_watt > max_watt: # asic temp is hot
       if cur_corevolt > min_corevolt :
-        if cur_asictemp > crit_temp :
+        if cur_asictemp > crit_asictemp or cur_vrtemp > crit_vrtemp :
           delta_volt = def_corevolt - cur_corevolt
           delta_freq = def_freq - cur_freq
         else :
@@ -77,8 +80,14 @@ def manage_temp():
       mnr_freq = cur_freq + delta_freq
       url = "http://" + miner_ip + "/api/system"
       data = {"frequency": mnr_freq, "coreVoltage": mnr_volt}
-      print("error rate: ", cur_error, " cur_corevolt: ", cur_corevolt)
-      print("new asic frequency: ", mnr_freq, " new core voltage: ", mnr_volt)
+      print("=============================================")
+      print(f"Power {cur_watt} - {max_watt}")
+      print(f"Err Rate {cur_error} - {max_error}")
+      print(f"Frequency {cur_freq} - {max_freq}")
+      print(f"Core Voltage {cur_corevolt} - {max_corevolt}")
+      print(f"Asic Temp {cur_asictemp} - {max_asictemp}")
+      print(f"New Frequency {mnr_freq}")
+      print(f"New Core Voltage {mnr_volt}")
       try:
         response = requests.patch(url, json=data, timeout=5)
       except requests.RequestException as e:
