@@ -1,18 +1,19 @@
 ### bitaxe_mngr.py
 
-import requests
+from concurrent.futures import ThreadPoolExecutor
 import json
+import requests
 import time
 import traceback
 
-miner_ip = "192.168.1.1"
+minerIps = ["192.168.1.1", "192.168.1.2", "192.168.1.3"]
 
 chk_interval = 10
 
 crit_asictemp = 73
 crit_vrtemp = 78
 
-def_freq = 500
+def_freq = 525
 def_corevolt = 1000
 
 min_freq = 400
@@ -24,7 +25,7 @@ max_corevolt = 1150
 max_asictemp = 66
 max_vrtemp = 75
 max_watt = 24
-max_error = 2
+max_error = 1
 
 ################################################################
 
@@ -32,8 +33,38 @@ def printError(e) :
   frame_summary = traceback.extract_tb(e.__traceback__)[-1]
   print(f"Exception: {e}:{frame_summary.filename}:{frame_summary.lineno}")
 
-def manage_temp():
-  url = "http://" + miner_ip + "/api/system/info"
+################################################################
+
+def initialize(miner) :
+  url_id = "http://" + miner + "/api/system/identify"
+
+  try :
+    response = requests.post(url_id, timeout=5)
+  except requests.RequestException as e :
+    printError(e)
+  else :
+    if response.status_code == 200 :
+      try:
+        url_patch = "http://" + miner + "/api/system"
+        mnr_volt = def_corevolt
+        mnr_freq = def_freq
+        data = {"frequency": mnr_freq, "coreVoltage": mnr_volt}
+        headers = {"Content-Type": "application/json"}
+        requests.Response = requests.patch(url_patch, json=data, headers=headers, timeout=5)
+      except requests.RequestException as e:
+        printError(e)
+
+################################################################
+
+def initializeMiners(miners) :
+  with ThreadPoolExecutor(max_workers = len(miners)) as executor:
+    for miner in miners :
+      executor.submit(initialize, miner)
+
+################################################################
+
+def manageMiner(miner):
+  url = "http://" + miner + "/api/system/info"
   try:
     response = requests.get(url, timeout=5)
   except requests.RequestException as e:
@@ -74,12 +105,14 @@ def manage_temp():
           delta_volt = 1
         if cur_freq < max_freq :
           delta_freq = 1
-          
+
     if delta_volt != 0 or delta_freq != 0:
       mnr_volt = cur_corevolt + delta_volt
       mnr_freq = cur_freq + delta_freq
-      url = "http://" + miner_ip + "/api/system"
+      url = "http://" + miner + "/api/system"
       data = {"frequency": mnr_freq, "coreVoltage": mnr_volt}
+      headers = {"Content-Type": "application/json"}
+
       print("=============================================")
       print(f"Power {cur_watt} - {max_watt}")
       print(f"Err Rate {cur_error} - {max_error}")
@@ -89,31 +122,19 @@ def manage_temp():
       print(f"New Frequency {mnr_freq}")
       print(f"New Core Voltage {mnr_volt}")
       try:
-        response = requests.patch(url, json=data, timeout=5)
+        response = requests.patch(url, json=data, headers=headers, timeout=5)
       except requests.RequestException as e:
         printError(e)
         return False
 
 ################################################################
 
-url = "http://" + miner_ip + "/api/system/identify"
-
-try:
-  response = requests.post(url, timeout=5)
-except requests.RequestException as e:
-  printError(e)
-
-mnr_volt = def_corevolt
-mnr_freq = def_freq
-
-url = "http://" + miner_ip + "/api/system"
-data = {"frequency": mnr_freq, "coreVoltage": mnr_volt}
-try:
-  response = requests.patch(url, json=data, timeout=5)
-except requests.RequestException as e:
-  printError(e)
+initializeMiners(minerIps)
 
 while True:
+  with ThreadPoolExecutor(max_workers = len(minerIps)) as executor:
 
-  manage_temp()
+    for minerIp in minerIps :
+      executor.submit(manageMiner, minerIp)
+
   time.sleep(chk_interval)
