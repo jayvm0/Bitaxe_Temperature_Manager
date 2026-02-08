@@ -1,0 +1,39 @@
+{
+  "name": "my farm",
+  "run_manager": true,
+  "poll_interval": 10,
+  "farm": [
+    {
+      "name": "gamma601",
+      "miners": ["10.10.10.1", "10.10.10.2", "10.10.10.3"],
+      "crit_asictemp": 73,
+      "crit_vrtemp": 78,
+      "def_freq": 525,
+      "def_corevolt": 1000,
+      "min_freq": 400,
+      "max_freq": 500,
+      "min_corevolt": 1000,
+      "max_corevolt": 1150,
+      "max_asictemp": 66,
+      "max_vrtemp": 75,
+      "max_watt": 24,
+      "max_error": 0.5
+    },
+    {
+      "name": "qaxe",
+      "miners": ["10.10.10.4", "10.10.10.5", "10.10.10.6"],
+      "crit_asictemp": 73,
+      "crit_vrtemp": 78,
+      "def_freq": 525,
+      "def_corevolt": 1150,
+      "min_freq": 400,
+      "max_freq": 525,
+      "min_corevolt": 1000,
+      "max_corevolt": 1150,
+      "max_asictemp": 66,
+      "max_vrtemp": 75,
+      "max_watt": 24,
+      "max_error": 0.5
+    }
+  ]
+}

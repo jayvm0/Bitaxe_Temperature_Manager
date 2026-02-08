@@ -5,27 +5,11 @@ import json
 import requests
 import time
 import traceback
+import sys
 
-minerIps = ["192.168.1.1", "192.168.1.2", "192.168.1.3"]
-
-chk_interval = 10
-
-crit_asictemp = 73
-crit_vrtemp = 78
-
-def_freq = 525
-def_corevolt = 1000
-
-min_freq = 400
-max_freq = 500
-
-min_corevolt = 1000
-max_corevolt = 1150
-
-max_asictemp = 66
-max_vrtemp = 75
-max_watt = 24
-max_error = 1
+pollInterval = 10
+runManager = False
+farm = []
 
 ################################################################
 
@@ -35,106 +19,171 @@ def printError(e) :
 
 ################################################################
 
-def initialize(miner) :
-  url_id = "http://" + miner + "/api/system/identify"
+def readConfig() :
+  global runManager
+  global pollInterval
+  global farm
+
+  if len(sys.argv) > 1 :
+    configFile = sys.argv[1]
+  else :
+    configFile = 'config.json'
 
   try :
-    response = requests.post(url_id, timeout=5)
+    with open(configFile, 'r') as file:
+      config = json.load(file)
+  except FileNotFoundError as e :
+    printError(e)
+    return(False)
+  else :
+    runManager = config["run_manager"]
+    pollInterval = config["poll_interval"]
+    farm = config["farm"]
+    return(True)
+
+################################################################
+
+def initializeMiner(miner, fleetParam) :
+  defFreq = fleetParam["def_freq"]
+  defCoreVolt = fleetParam["def_corevolt"]
+  url = "http://" + miner + "/api/system"
+  mnr_volt = defCoreVolt
+  mnr_freq = defFreq
+  data = {"frequency": mnr_freq, "coreVoltage": mnr_volt}
+  headers = {"Content-Type": "application/json"}
+
+  try :
+    response = requests.patch(url, json=data, headers=headers, timeout=5)
   except requests.RequestException as e :
     printError(e)
-  else :
-    if response.status_code == 200 :
-      try:
-        url_patch = "http://" + miner + "/api/system"
-        mnr_volt = def_corevolt
-        mnr_freq = def_freq
-        data = {"frequency": mnr_freq, "coreVoltage": mnr_volt}
-        headers = {"Content-Type": "application/json"}
-        requests.Response = requests.patch(url_patch, json=data, headers=headers, timeout=5)
-      except requests.RequestException as e:
-        printError(e)
-
-################################################################
-
-def initializeMiners(miners) :
-  with ThreadPoolExecutor(max_workers = len(miners)) as executor:
-    for miner in miners :
-      executor.submit(initialize, miner)
-
-################################################################
-
-def manageMiner(miner):
-  url = "http://" + miner + "/api/system/info"
-  try:
-    response = requests.get(url, timeout=5)
-  except requests.RequestException as e:
-    printError(e)
     return False
-
-  status_code = response.status_code
-  if status_code == 200 :
-    try :
-      miner_info = response.json()
-    except requests.RequestException as e:
-      printError(e)
+  else :
+    status_code = response.status_code
+    if status_code == 200 :
+      return True
+    else :
       return False
 
-    cur_vrtemp = miner_info['vrTemp']
-    cur_asictemp = miner_info['temp']
-    cur_error = miner_info['errorPercentage']
-    cur_freq = miner_info['frequency']
-    cur_corevolt = miner_info['coreVoltage']
-    cur_watt = miner_info['power']
+################################################################
 
-    delta_volt = 0
-    delta_freq = 0
+def manageMiner(miner, fleetParam) :
+  fleetName = fleetParam["name"]
+  critAsicTemp = fleetParam["crit_asictemp"]
+  critVRTemp = fleetParam["crit_vrtemp"]
+  defFreq = fleetParam["def_freq"]
+  defCoreVolt = fleetParam["def_corevolt"]
+  minFreq = fleetParam["min_freq"]
+  maxFreq = fleetParam["max_freq"]
+  minCoreVolt = fleetParam["min_corevolt"]
+  maxCoreVolt = fleetParam["max_corevolt"]
+  maxAsicTemp = fleetParam["max_asictemp"]
+  maxVRTemp = fleetParam["max_vrtemp"]
+  maxWatt = fleetParam["max_watt"]
+  maxError = fleetParam["max_error"]
 
-    if cur_asictemp > max_asictemp or cur_vrtemp > max_vrtemp or cur_watt > max_watt: # asic temp is hot
-      if cur_corevolt > min_corevolt :
-        if cur_asictemp > crit_asictemp or cur_vrtemp > crit_vrtemp :
-          delta_volt = def_corevolt - cur_corevolt
-          delta_freq = def_freq - cur_freq
-        else :
-          delta_volt = -1
-      else :
-        if cur_freq > min_freq :
-          delta_freq = -1
-    else :
-      if cur_error > max_error :
-        if cur_corevolt < max_corevolt :
-          delta_volt = 1
-        if cur_freq < max_freq :
-          delta_freq = 1
-
-    if delta_volt != 0 or delta_freq != 0:
-      mnr_volt = cur_corevolt + delta_volt
-      mnr_freq = cur_freq + delta_freq
-      url = "http://" + miner + "/api/system"
-      data = {"frequency": mnr_freq, "coreVoltage": mnr_volt}
-      headers = {"Content-Type": "application/json"}
-
-      print("=============================================")
-      print(f"Power {cur_watt} - {max_watt}")
-      print(f"Err Rate {cur_error} - {max_error}")
-      print(f"Frequency {cur_freq} - {max_freq}")
-      print(f"Core Voltage {cur_corevolt} - {max_corevolt}")
-      print(f"Asic Temp {cur_asictemp} - {max_asictemp}")
-      print(f"New Frequency {mnr_freq}")
-      print(f"New Core Voltage {mnr_volt}")
-      try:
-        response = requests.patch(url, json=data, headers=headers, timeout=5)
-      except requests.RequestException as e:
+  url = "http://" + miner + "/api/system/info"
+  try :
+    response = requests.get(url, timeout=5)
+  except requests.RequestException as e :
+    printError(e)
+    return False
+  else :
+    statusCode = response.status_code
+    if statusCode == 200 :
+      try :
+        minerInfo = response.json()
+      except requests.RequestException as e :
         printError(e)
         return False
+      else :
+        curVRTemp = minerInfo['vrTemp']
+        curAsicTemp = minerInfo['temp']
+        curError = minerInfo['errorPercentage']
+        curFreq = minerInfo['frequency']
+        curCoreVolt = minerInfo['coreVoltage']
+        curWatt = minerInfo['power']
+
+        deltaVolt = 0
+        deltaFreq = 0
+
+        if curAsicTemp > maxAsicTemp or curVRTemp > maxVRTemp or curWatt > maxWatt : # asic temp is hot
+          if curCoreVolt > minCoreVolt :
+            if curAsicTemp > critAsicTemp or curVRTemp > critVRTemp :
+              if curCoreVolt > defCoreVolt :
+                deltaVolt = defCoreVolt - curCoreVolt
+              else :
+                deltaVolt = minCoreVolt - curCoreVolt
+              if curFreq > defFreq :
+                deltaFreq = defFreq - curFreq
+              else:
+                deltaFreq = minFreq - curFreq
+            else :
+              deltaVolt = -1
+              if (curFreq % 4) == 0 :
+                deltaFreq = -1
+          else :
+            if curFreq > minFreq :
+              deltaFreq = -1
+        else :
+          if curError > maxError :
+            if curCoreVolt < maxCoreVolt :
+              deltaVolt = 1
+            if curFreq < maxFreq :
+              deltaFreq = 1
+
+        if deltaVolt != 0 or deltaFreq != 0 :
+          mnrVolt = curCoreVolt + deltaVolt
+          mnrFreq = curFreq + deltaFreq
+          url = "http://" + miner + "/api/system"
+          data = {"frequency": mnrFreq, "coreVoltage": mnrVolt}
+          headers = {"Content-Type": "application/json"}
+
+          print("=============================================")
+          print(f"Fleet: {fleetName}")
+          print(f"Miner: {miner}")
+          print(f"Power {curWatt} [{maxWatt}]")
+          print(f"Err Rate {curError} [{maxError}]")
+          print(f"Frequency {curFreq} [{maxFreq}]")
+          print(f"Core Voltage {curCoreVolt} [{maxCoreVolt}]")
+          print(f"Asic Temp {curAsicTemp} [{maxAsicTemp}]")
+          print(f"New Frequency {mnrFreq}")
+          print(f"New Core Voltage {mnrVolt}")
+
+          try :
+            response = requests.patch(url, json=data, headers=headers, timeout=5)
+          except requests.RequestException as e :
+            printError(e)
+            return False
+          else :
+            status_code = response.status_code
+            if status_code == 200 :
+              return True
+            else :
+              return False
 
 ################################################################
 
-initializeMiners(minerIps)
+if readConfig() :
+  if runManager :
+    for fleet in farm :
+      fleetMiners = fleet["miners"]
+      with ThreadPoolExecutor(max_workers = len(fleetMiners)) as executor:
+        for miner in fleetMiners :
+            executor.submit(initializeMiner, miner, fleet)
 
-while True:
-  with ThreadPoolExecutor(max_workers = len(minerIps)) as executor:
+    time.sleep(pollInterval)
 
-    for minerIp in minerIps :
-      executor.submit(manageMiner, minerIp)
+  while runManager :
+    for fleet in farm :
+      fleetMiners = fleet["miners"]
+      with ThreadPoolExecutor(max_workers = len(fleetMiners)) as executor :
+        for miner in fleetMiners :
+          executor.submit(manageMiner, miner, fleet)
 
-  time.sleep(chk_interval)
+    time.sleep(pollInterval)
+    readConfig()
+
+  print("End")
+  sys.exit(0)
+else :
+  sys.exit(1)
