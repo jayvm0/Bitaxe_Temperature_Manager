@@ -4,14 +4,27 @@ Manage asic and vr temperature by automatically adjusting frequency and core vol
 
 ---
 
-### Prerequisites:
+### Project motivation
+
+1. I'm too lazy to check miner temperatures and update operating parameters repeatedly and manually.
+2. I want to ensure my miners don’t overheat while running when I’m away from home.
+
+---
+
+### Warning
+
+This script modifies hardware settings, **use at your own risk**.
+
+---
+
+### Prerequisites
 
 Python 3.11 or higher <br>
 Bitaxe miner <br>
 
 ---
 
-### Installation:
+### Installation
 
 - Download the zip archive (https://github.com/jayvm0/Bitaxe_Temperature_Manager/archive/refs/heads/main.zip)
 - Create a new directory for the Python script and virtual environment (ex. jayvm0)
@@ -36,7 +49,7 @@ Bitaxe miner <br>
 
 ---
 
-### Configuration:
+### Configuration
 
 - edit **config.json**
 
@@ -87,6 +100,8 @@ Bitaxe miner <br>
   if current voltage regulator temperature is above this value then frequency/core voltage is gradually reduced, else frequency/core voltage is increased within user defined limits
 
   `max_watt (integer)` <br>
+  max value should not exceed 80% of your PSU wattage rating
+
   if current miner power usage is above this value then frequency/core voltage is gradually reduced within user defined limits
 
   `max_error (integer)` <br>
