@@ -10,12 +10,18 @@ import sys
 pollInterval = 10
 runManager = False
 farm = []
+polliter = 1
 
 ################################################################
 
 def printError(e) :
   frame_summary = traceback.extract_tb(e.__traceback__)[-1]
   print(f"Exception: {e}:{frame_summary.filename}:{frame_summary.lineno}")
+
+################################################################
+
+def isNumber(var) :
+  return(type(var) in [int, float])
 
 ################################################################
 
@@ -37,15 +43,33 @@ def readConfig() :
     return(False)
   else :
     runManager = config["run_manager"]
+    if not isinstance(runManager, bool) :
+      runManager = False
+
     pollInterval = config["poll_interval"]
+    if not isNumber(pollInterval) :
+      return(False)
+    else :
+      if pollInterval < 5 :
+        pollInterval = 5
+
     farm = config["farm"]
-    return(True)
+    if not isinstance(farm, list) :
+      return(False)
+    else :
+      return(True)
 
 ################################################################
 
 def initializeMiner(miner, fleetParam) :
   defFreq = fleetParam["def_freq"]
+  if not isNumber(defFreq) :
+    raise(ValueError)
+
   defCoreVolt = fleetParam["def_corevolt"]
+  if not isNumber(defCoreVolt) :
+    raise(ValueError)
+
   url = "http://" + miner + "/api/system"
   mnr_volt = defCoreVolt
   mnr_freq = defFreq
@@ -53,7 +77,7 @@ def initializeMiner(miner, fleetParam) :
   headers = {"Content-Type": "application/json"}
 
   try :
-    response = requests.patch(url, json=data, headers=headers, timeout=5)
+    response = requests.patch(url, json=data, headers=headers, timeout=2)
   except requests.RequestException as e :
     printError(e)
     return False
@@ -67,23 +91,63 @@ def initializeMiner(miner, fleetParam) :
 ################################################################
 
 def manageMiner(miner, fleetParam) :
+  global polliter
+  incFreq = False
+  decFreq = False
+
   fleetName = fleetParam["name"]
+
   critAsicTemp = fleetParam["crit_asictemp"]
+  if not isNumber(critAsicTemp) :
+    raise(ValueError)
+
   critVRTemp = fleetParam["crit_vrtemp"]
+  if not isNumber(critVRTemp) :
+    raise(ValueError)
+
   defFreq = fleetParam["def_freq"]
+  if not isNumber(defFreq) :
+    raise(ValueError)
+
   defCoreVolt = fleetParam["def_corevolt"]
+  if not isNumber(defCoreVolt) :
+    raise(ValueError)
+
   minFreq = fleetParam["min_freq"]
+  if not isNumber(minFreq) :
+    raise(ValueError)
+
   maxFreq = fleetParam["max_freq"]
+  if not isNumber(maxFreq) :
+    raise(ValueError)
+
   minCoreVolt = fleetParam["min_corevolt"]
+  if not isNumber(minCoreVolt) :
+    raise(ValueError)
+
   maxCoreVolt = fleetParam["max_corevolt"]
+  if not isNumber(maxCoreVolt) :
+    raise(ValueError)
+
   maxAsicTemp = fleetParam["max_asictemp"]
+  if not isNumber(maxAsicTemp) :
+    raise(ValueError)
+
   maxVRTemp = fleetParam["max_vrtemp"]
+  if not isNumber(maxVRTemp) :
+    raise(ValueError)
+
   maxWatt = fleetParam["max_watt"]
+  if not isNumber(maxWatt) :
+    raise(ValueError)
+
   maxError = fleetParam["max_error"]
+  if not isNumber(maxError) :
+    raise(ValueError)
 
   url = "http://" + miner + "/api/system/info"
   try :
-    response = requests.get(url, timeout=5)
+    response = requests.get(url, timeout=2)
   except requests.RequestException as e :
     printError(e)
     return False
@@ -106,30 +170,41 @@ def manageMiner(miner, fleetParam) :
         deltaVolt = 0
         deltaFreq = 0
 
-        if curAsicTemp > maxAsicTemp or curVRTemp > maxVRTemp or curWatt > maxWatt : # asic temp is hot
-          if curCoreVolt > minCoreVolt :
-            if curAsicTemp > critAsicTemp or curVRTemp > critVRTemp :
-              if curCoreVolt > defCoreVolt :
-                deltaVolt = defCoreVolt - curCoreVolt
-              else :
-                deltaVolt = minCoreVolt - curCoreVolt
-              if curFreq > defFreq :
-                deltaFreq = defFreq - curFreq
-              else:
-                deltaFreq = minFreq - curFreq
+        if polliter % 5 == 0 :
+          decFreq = True
+          incFreq = False
+        else :
+          decFreq = False
+          incFreq = True
+
+        if polliter < 5 :
+          polliter += 1
+        else :
+          polliter = 1
+
+        if curAsicTemp > maxAsicTemp or curVRTemp > maxVRTemp or curWatt > maxWatt :
+          if curAsicTemp > critAsicTemp or curVRTemp > critVRTemp :
+            if curCoreVolt > defCoreVolt :
+              deltaVolt = defCoreVolt - curCoreVolt
             else :
-              deltaVolt = -1
-              if (curFreq % 4) == 0 :
-                deltaFreq = -1
+              deltaVolt = minCoreVolt - curCoreVolt
+            if curFreq > defFreq :
+              deltaFreq = defFreq - curFreq
+            else:
+              deltaFreq = minFreq - curFreq
           else :
-            if curFreq > minFreq :
+            if curCoreVolt > minCoreVolt :
+              deltaVolt = -1
+            if curFreq >= defFreq :
+              if decFreq :
+                deltaFreq = -1
+            elif curFreq > minFreq :
               deltaFreq = -1
         else :
-          if curError > maxError :
-            if curCoreVolt < maxCoreVolt :
-              deltaVolt = 1
-            if curFreq < maxFreq :
-              deltaFreq = 1
+          if (curCoreVolt < maxCoreVolt) and (curError > maxError) :
+            deltaVolt = 1
+          if curFreq < maxFreq and incFreq :
+            deltaFreq = 1
 
         if deltaVolt != 0 or deltaFreq != 0 :
           mnrVolt = curCoreVolt + deltaVolt
@@ -150,7 +225,7 @@ def manageMiner(miner, fleetParam) :
           print(f"New Core Voltage {mnrVolt}")
 
           try :
-            response = requests.patch(url, json=data, headers=headers, timeout=5)
+            response = requests.patch(url, json=data, headers=headers, timeout=2)
           except requests.RequestException as e :
             printError(e)
             return False
@@ -165,23 +240,31 @@ def manageMiner(miner, fleetParam) :
 
 if readConfig() :
   if runManager :
-    for fleet in farm :
-      fleetMiners = fleet["miners"]
-      with ThreadPoolExecutor(max_workers = len(fleetMiners)) as executor:
-        for miner in fleetMiners :
-            executor.submit(initializeMiner, miner, fleet)
-
-    time.sleep(pollInterval)
+    try :
+      for fleet in farm :
+        fleetMiners = fleet["miners"]
+        with ThreadPoolExecutor(max_workers = len(fleetMiners)) as executor:
+          for miner in fleetMiners :
+              executor.submit(initializeMiner, miner, fleet)
+    except ValueError as e :
+      printError(e)
+      sys.exit(1)
+    else:
+      time.sleep(pollInterval)
 
   while runManager :
-    for fleet in farm :
-      fleetMiners = fleet["miners"]
-      with ThreadPoolExecutor(max_workers = len(fleetMiners)) as executor :
-        for miner in fleetMiners :
-          executor.submit(manageMiner, miner, fleet)
-
-    time.sleep(pollInterval)
-    readConfig()
+    try :
+      for fleet in farm :
+        fleetMiners = fleet["miners"]
+        with ThreadPoolExecutor(max_workers = len(fleetMiners)) as executor :
+          for miner in fleetMiners :
+            executor.submit(manageMiner, miner, fleet)
+    except ValueError as e :
+      printError(e)
+      sys.exit(1)
+    else :
+      time.sleep(pollInterval)
+      readConfig()
 
   print("End")
   sys.exit(0)
