@@ -10,7 +10,7 @@ import sys
 pollInterval = 10
 runManager = False
 farm = []
-polliter = 1
+pollIter = 1
 
 ################################################################
 
@@ -90,8 +90,38 @@ def initializeMiner(miner, fleetParam) :
 
 ################################################################
 
+def setToMinimum(miner, fleetParam) :
+  # minFreq = fleetParam["min_freq"]
+  # if not isNumber(minFreq) :
+  #   raise(ValueError)
+
+  # minCoreVolt = fleetParam["min_corevolt"]
+  # if not isNumber(minCoreVolt) :
+  #   raise(ValueError)
+
+  # url = "http://" + miner + "/api/system"
+  # mnr_volt = minCoreVolt
+  # mnr_freq = minFreq
+  # data = {"frequency": mnr_freq, "coreVoltage": mnr_volt}
+  # headers = {"Content-Type": "application/json"}
+
+  # try :
+  #   response = requests.patch(url, json=data, headers=headers, timeout=2)
+  # except requests.RequestException as e :
+  #   printError(e)
+  #   return False
+  # else :
+  #   status_code = response.status_code
+  #   if status_code == 200 :
+  #     return True
+  #   else :
+  #     return False
+  return True
+
+################################################################
+
 def manageMiner(miner, fleetParam) :
-  global polliter
+  global pollIter
   incFreq = False
   decFreq = False
 
@@ -144,6 +174,9 @@ def manageMiner(miner, fleetParam) :
   maxError = fleetParam["max_error"]
   if not isNumber(maxError) :
     raise(ValueError)
+  else :
+    if maxError > 100 :
+      maxError = 100
 
   url = "http://" + miner + "/api/system/info"
   try :
@@ -162,25 +195,23 @@ def manageMiner(miner, fleetParam) :
       else :
         curVRTemp = minerInfo['vrTemp']
         curAsicTemp = minerInfo['temp']
-        curError = minerInfo['errorPercentage']
         curFreq = minerInfo['frequency']
         curCoreVolt = minerInfo['coreVoltage']
         curWatt = minerInfo['power']
+        try :
+          curError = minerInfo['errorPercentage']
+        except KeyError as e :
+          curError = maxError
 
         deltaVolt = 0
         deltaFreq = 0
 
-        if polliter % 5 == 0 :
+        if pollIter % 5 == 0 :
           decFreq = True
           incFreq = False
         else :
           decFreq = False
           incFreq = True
-
-        if polliter < 5 :
-          polliter += 1
-        else :
-          polliter = 1
 
         if curAsicTemp > maxAsicTemp or curVRTemp > maxVRTemp or curWatt > maxWatt :
           if curAsicTemp > critAsicTemp or curVRTemp > critVRTemp :
@@ -194,7 +225,10 @@ def manageMiner(miner, fleetParam) :
               deltaFreq = minFreq - curFreq
           else :
             if curCoreVolt > minCoreVolt :
-              deltaVolt = -1
+              if decFreq :
+                deltaVolt = -5
+              else :
+                deltaVolt = -2
             if curFreq >= defFreq :
               if decFreq :
                 deltaFreq = -1
@@ -202,13 +236,24 @@ def manageMiner(miner, fleetParam) :
               deltaFreq = -1
         else :
           if (curCoreVolt < maxCoreVolt) and (curError > maxError) :
-            deltaVolt = 1
+            deltaVolt = 3
           if curFreq < maxFreq and incFreq :
             deltaFreq = 1
 
         if deltaVolt != 0 or deltaFreq != 0 :
           mnrVolt = curCoreVolt + deltaVolt
           mnrFreq = curFreq + deltaFreq
+
+          if mnrVolt < minCoreVolt :
+            mnrVolt = minCoreVolt
+          elif mnrVolt > maxCoreVolt :
+            mnrVolt = maxCoreVolt
+
+          if mnrFreq < minFreq :
+            mnrFreq = minFreq
+          elif mnrFreq > maxFreq :
+            mnrFreq = maxFreq
+
           url = "http://" + miner + "/api/system"
           data = {"frequency": mnrFreq, "coreVoltage": mnrVolt}
           headers = {"Content-Type": "application/json"}
@@ -235,6 +280,17 @@ def manageMiner(miner, fleetParam) :
               return True
             else :
               return False
+        else :
+          print("=============================================")
+          print(f"Fleet: {fleetName}")
+          print(f"Miner: {miner}")
+          print(f"Power {curWatt} [{maxWatt}]")
+          print(f"Err Rate {curError} [{maxError}]")
+          print(f"Frequency {curFreq} [{maxFreq}]")
+          print(f"Core Voltage {curCoreVolt} [{maxCoreVolt}]")
+          print(f"Asic Temp {curAsicTemp} [{maxAsicTemp}]")
+          print(f"New Frequency {mnrFreq}")
+          print(f"New Core Voltage {mnrVolt}")
 
 ################################################################
 
@@ -263,8 +319,22 @@ if readConfig() :
       printError(e)
       sys.exit(1)
     else :
+      if pollIter < 5 :
+        pollIter += 1
+      else :
+        pollIter = 1
       time.sleep(pollInterval)
       readConfig()
+
+
+#  set minimum operating parameters before exit
+  if not runManager :
+    for fleet in farm :
+      fleetMiners = fleet["miners"]
+      with ThreadPoolExecutor(max_workers = len(fleetMiners)) as executor:
+        for miner in fleetMiners :
+            executor.submit(setToMinimum, miner, fleet)
+    time.sleep(5)
 
   print("End")
   sys.exit(0)

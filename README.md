@@ -58,13 +58,13 @@ Bitaxe miner <br>
 
   `run_manager (boolean)` <br>
   `true` - allow new instance to run <br>
-  `false` - (default) stop currently running instance / prevent new instance from running
+  `false` - (default) stop the currently running instance or prevent new instances from starting
 
   `poll_interval (integer)` <br>
   time interval (seconds) between successive checks, minimum value is 5
 
   `farm (array of objects)` <br>
-  comma separated list of fleet objects <br>
+  comma separated list of fleet (set of miners in the farm that share the same operating parameters) objects <br>
   miner operating parameters
 
   `name (string)` <br>
@@ -75,40 +75,32 @@ Bitaxe miner <br>
 
   `crit_asictemp (integer)` <br>
   `crit_vrtemp (integer)` <br>
-  if asic or vr temperature rises above these values then miner frequency and core voltage will be set to user defined minimum
+  if the ASIC or VR temperature rises above these values, the miner frequency and core voltage will be set to the user-defined minimum
 
   `def_freq (integer)` <br>
   `def_corevolt (integer)` <br>
-  miner parameters are set to these default values on script start
+  miner parameters are set to these default values at the start of the script
 
   `min_freq (integer)` <br>
   `max_freq (integer)` <br>
-  user defined ASIC frequency range <br>
-  min_freq = underclock target frequency <br>
-  max_freq = overclock target frequency
+  user defined ASIC frequency range, ASIC frequency will not exceed this range <br>
 
   `min_corevolt (integer)` <br>
   `max_corevolt (integer)` <br>
-  user defined core voltage range <br>
-  min_corevolt = underclock target core voltage <br>
-  max_corevolt = overclock target core voltage
+  user defined core voltage range, core voltage will not exceed this range
 
   `max_asictemp (integer)` <br>
-  if current ASIC temperature is above this value then frequency/core voltage is gradually reduced, else frequency/core voltage is increased within user defined limits
+  if the current ASIC temperature exceeds this value, the frequency and core voltage are gradually reduced; otherwise, they are increased within the user-defined range
 
   `max_vrtemp (integer)` <br>
-  if current voltage regulator temperature is above this value then frequency/core voltage is gradually reduced, else frequency/core voltage is increased within user defined limits
+  if the current voltage regulator temperature is above this value, the frequency/core voltage is gradually reduced; otherwise, the frequency/core voltage is increased within the user-defined range
 
   `max_watt (integer)` <br>
-  max value should not exceed 80% of your PSU wattage rating
-
-  if current miner power usage is above this value then frequency/core voltage is gradually reduced within user defined limits
+  maximum value should not exceed 80% of your PSU wattage rating <br>
+  if the current miner power usage is above this value, the frequency/core voltage is gradually reduced within the user-defined range
 
   `max_error (integer)` <br>
-  if current error rate is above this value then frequency/core voltage is gradually increased within user defined limits
-
-**_farm_** - composed of miner fleets <br>
-**_fleet_** - set of miners in the farm that share the same operating parameters
+  if the current error rate is above this value, the frequency/core voltage is gradually increased within the user-defined range
 
 ---
 
