@@ -7,7 +7,7 @@ Manage asic and vr temperature by automatically adjusting frequency and core vol
 ### Project motivation
 
 1. I'm too lazy to check miner temperatures and update operating parameters repeatedly and manually.
-2. I want to ensure my miners don’t overheat while running when I’m away from home.
+2. I want to ensure my miners don’t overheat while running when I’m away.
 
 ---
 
